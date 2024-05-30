@@ -8,6 +8,8 @@
 #define NUM_MBUFS 8191
 #define MBUF_CACHE_SIZE 250
 
+#define RTE_LOGTYPE_APP RTE_LOGTYPE_USER1
+
 /* echo.c: Basic DPDK UDP echo server */
 
 int main(int argc, char *argv[]) {
@@ -23,7 +25,7 @@ int main(int argc, char *argv[]) {
 	if (mbuf_pool == NULL)
 		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 
-	rte_log(RTE_LOG_INFO, RTE_LOGTYPE_USER1, "Initialisation complete\n");
+	RTE_LOG(INFO, APP, "Initialisation complete\n");
 
 	rte_eal_cleanup();
 
