@@ -5,6 +5,7 @@
 #include <rte_log.h>
 #include <rte_mbuf.h>
 #include <rte_ethdev.h>
+#include <rte_byteorder.h>
 
 #define RX_RING_SIZE 1024
 #define TX_RING_SIZE 1024
@@ -99,10 +100,16 @@ lcore_main(void) {
 		struct rte_ether_hdr *ether_hdr;
 		u_int8_t src_mac[RTE_ETHER_ADDR_LEN];
 		u_int8_t dest_mac[RTE_ETHER_ADDR_LEN];
+		u_int16_t ether_type;
 		for (int i = 0; i < nb_rx; i++) {
 			ether_hdr = rte_pktmbuf_mtod(bufs[i], struct rte_ether_hdr *);
+			ether_type = ether_hdr->ether_type;
 			rte_memcpy(src_mac, &ether_hdr->src_addr, sizeof(u_int8_t) * RTE_ETHER_ADDR_LEN);
-			RTE_LOG(INFO, APP, "Frame sent from MAC Address: %02x:%02x:%02x:%02x:%02x:%02x\n", src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
+			RTE_LOG(INFO, APP, "Frame sent from MAC Address: %02x:%02x:%02x:%02x:%02x:%02x with type: %04x\n", 
+					src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5], rte_bswap16(ether_type));
+			if (rte_bswap16(ether_type) == RTE_ETHER_TYPE_IPV4) {
+				RTE_LOG(INFO, APP, "IPv4\n");
+			}	
 		}
 	}
 
