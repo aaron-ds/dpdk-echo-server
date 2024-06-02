@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <netinet/in.h>
 #include <rte_eal.h>
 #include <rte_common.h>
 #include <rte_log.h>
 #include <rte_mbuf.h>
 #include <rte_ethdev.h>
 #include <rte_byteorder.h>
+#include <rte_udp.h>
 
 #define RX_RING_SIZE 1024
 #define TX_RING_SIZE 1024
@@ -96,19 +98,33 @@ lcore_main(void) {
 		if (unlikely(nb_rx == 0))
 			continue;
 
-		RTE_LOG(INFO, APP, "Received a frame\n");
 		struct rte_ether_hdr *ether_hdr;
+		struct rte_ipv4_hdr *ipv4_hdr;
+		struct rte_udp_hdr *udp_hdr;
 		u_int8_t src_mac[RTE_ETHER_ADDR_LEN];
 		u_int8_t dest_mac[RTE_ETHER_ADDR_LEN];
 		u_int16_t ether_type;
+		u_int16_t src_port;
+		u_int16_t dest_port;
 		for (int i = 0; i < nb_rx; i++) {
+			RTE_LOG(INFO, APP, "Received a frame\n");
 			ether_hdr = rte_pktmbuf_mtod(bufs[i], struct rte_ether_hdr *);
 			ether_type = ether_hdr->ether_type;
 			rte_memcpy(src_mac, &ether_hdr->src_addr, sizeof(u_int8_t) * RTE_ETHER_ADDR_LEN);
-			RTE_LOG(INFO, APP, "Frame sent from MAC Address: %02x:%02x:%02x:%02x:%02x:%02x with type: %04x\n", 
-					src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5], rte_bswap16(ether_type));
+			rte_memcpy(dest_mac, &ether_hdr->dst_addr, sizeof(u_int8_t) * RTE_ETHER_ADDR_LEN);
+                        RTE_LOG(INFO, APP, "Frame received from MAC Address: %02x:%02x:%02x:%02x:%02x:%02x with type: %04x\n",
+                                        src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5], rte_bswap16(ether_type));
 			if (rte_bswap16(ether_type) == RTE_ETHER_TYPE_IPV4) {
-				RTE_LOG(INFO, APP, "IPv4\n");
+				ipv4_hdr = rte_pktmbuf_mtod_offset(bufs[i], struct rte_ipv4_hdr*, sizeof(struct rte_ether_hdr));
+				u_int8_t next_proto = ipv4_hdr->next_proto_id;
+				RTE_LOG(INFO, APP, "next proto is %x\n", next_proto);
+				if (next_proto == IPPROTO_UDP) {
+					RTE_LOG(INFO, APP, "Received UDP message\n");				
+					udp_hdr = rte_pktmbuf_mtod_offset(bufs[i], struct rte_udp_hdr*, sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
+					src_port = udp_hdr->src_port;
+					dest_port = udp_hdr->dst_port;
+					RTE_LOG(INFO, APP, "Source port: %u, Destination port: %u\n", rte_bswap16(udp_hdr->src_port), rte_bswap16(udp_hdr->dst_port));	
+				}
 			}	
 		}
 	}
