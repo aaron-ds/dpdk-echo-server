@@ -23,7 +23,7 @@
 /* echo.c: Basic DPDK UDP echo server */
 
 struct rte_ether_addr mac_addr;
-struct id_addr;
+struct in_addr bound_addr;
 
 int
 port_init(uint16_t port_id, struct rte_mempool *mbuf_pool) {
@@ -156,26 +156,26 @@ lcore_main(void) {
 					}
 				}
 			} else if (rte_bswap16(ether_type) == RTE_ETHER_TYPE_ARP) {
-				RTE_LOG(INFO, APP, "Received ARP frame\n");
 				struct rte_arp_hdr *arp_hdr = rte_pktmbuf_mtod_offset(bufs[i], struct rte_arp_hdr*, sizeof(struct rte_ether_hdr));
 				if (rte_bswap16(arp_hdr->arp_opcode) == RTE_ARP_OP_REQUEST) { // assume ethernet and IPv4 for h/w and proto types 
 					struct rte_arp_ipv4 *ipv4_arp = &arp_hdr->arp_data;
-					printf("ARP target ip address is: 0x%08x\n", ipv4_arp->arp_tip);
-					printf("ARP source ip address is: 0x%08x\n", ipv4_arp->arp_sip);
-					RTE_LOG(INFO, APP, "Source MAC Address: %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
-							RTE_ETHER_ADDR_BYTES(&ipv4_arp->arp_sha));
-					RTE_LOG(INFO, APP, "Target MAC Address: %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
-                                                        RTE_ETHER_ADDR_BYTES(&ipv4_arp->arp_tha));
+					if (rte_bswap32(ipv4_arp->arp_tip) == ntohl(bound_addr.s_addr)) {
+						arp_hdr->arp_opcode = rte_bswap16(RTE_ARP_OP_REPLY);
+						ipv4_arp->arp_tha = ipv4_arp->arp_sha;
+						ipv4_arp->arp_sha = mac_addr;
+						u_int32_t tmp = ipv4_arp->arp_sip;
+					     	ipv4_arp->arp_sip = ipv4_arp->arp_tip;
+						ipv4_arp->arp_tip = tmp;
+						swap_mac_addr(ether_hdr);
+						const uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, &bufs[i], 1);
+						sent = 1;	
+					}
 				}
-
-
 			}	
 			if (sent == 0)
 				rte_pktmbuf_free(bufs[i]);
 		}
-
 	}
-
 }
 
 
@@ -188,10 +188,10 @@ main(int argc, char *argv[]) {
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
 
-	struct in_addr ip_addr;
-	int success = inet_pton(AF_INET, "10.0.0.11", &ip_addr);
+	//struct in_addr ip_addr;
+	int success = inet_pton(AF_INET, "10.0.0.11", &bound_addr);
 	if (success == 1) {
-		printf("ip address is: 0x%08x\n", ntohl(ip_addr.s_addr));
+		printf("ip address is: 0x%08x\n", ntohl(bound_addr.s_addr));
 	}
 
 	printf("argc: %d\n", argc);
