@@ -88,6 +88,36 @@ port_init(uint16_t port_id, struct rte_mempool *mbuf_pool) {
 	return 0;
 }
 
+/**
+ * Swap the source and destination ports
+ */
+void 
+swap_port(struct rte_udp_hdr *udp_hdr) {
+	u_int16_t temp_port = udp_hdr->dst_port;
+        udp_hdr->dst_port = udp_hdr->src_port;
+        udp_hdr->src_port = temp_port;
+}
+
+/**
+ * Swap the source and destination IPv4 addresses
+ */
+void 
+swap_ip_addr(struct rte_ipv4_hdr *ipv4_hdr) {
+	u_int32_t temp_ip = ipv4_hdr->dst_addr;
+        ipv4_hdr->dst_addr = ipv4_hdr->src_addr;
+        ipv4_hdr->src_addr = temp_ip;
+}
+
+/**
+ * Swap the source and destination MAC addresses
+ */
+void 
+swap_mac_addr(struct rte_ether_hdr *ether_hdr) {
+	struct rte_ether_addr temp_mac = ether_hdr->dst_addr;
+        ether_hdr->dst_addr = ether_hdr->src_addr;
+        ether_hdr->src_addr = temp_mac;
+}
+
 
 __rte_noreturn void
 lcore_main(void) {
@@ -113,17 +143,11 @@ lcore_main(void) {
 				if (next_proto == IPPROTO_UDP) {
 					udp_hdr = rte_pktmbuf_mtod_offset(bufs[i], struct rte_udp_hdr*, sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
 					if (1234 == rte_bswap16(udp_hdr->dst_port)) {
-						u_int16_t temp_port = udp_hdr->dst_port;
-						udp_hdr->dst_port = udp_hdr->src_port;
-						udp_hdr->src_port = temp_port;
-						u_int32_t temp_ip = ipv4_hdr->dst_addr;
-						ipv4_hdr->dst_addr = ipv4_hdr->src_addr;
-						ipv4_hdr->src_addr = temp_ip;
-						struct rte_ether_addr temp_mac = ether_hdr->dst_addr;
-						ether_hdr->dst_addr = ether_hdr->src_addr;
-						ether_hdr->src_addr = temp_mac;
+						swap_port(udp_hdr);
+						swap_ip_addr(ipv4_hdr);
+						swap_mac_addr(ether_hdr);
 						nb_processed++;
-						const uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, &bufs[i], 1);
+						const uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, &bufs[i], 1); // todo: batch writes
 						sent = 1;
 					}
 				}
@@ -131,17 +155,6 @@ lcore_main(void) {
 			if (sent == 0)
 				rte_pktmbuf_free(bufs[i]);
 		}
-
-
-		//const uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, bufs, nb_processed);
-
-		//RTE_LOG(INFO, APP, "Sent %x\n", nb_tx);
-
-		//if (unlikely(nb_tx < nb_rx)) {
-		//	uint16_t buf;
-		//	for (buf = nb_tx; buf < nb_rx; buf++)
-		//		rte_pktmbuf_free(bufs[buf]);
-		//}
 
 	}
 
