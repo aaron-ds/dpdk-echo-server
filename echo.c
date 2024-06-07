@@ -8,6 +8,8 @@
 #include <rte_ethdev.h>
 #include <rte_byteorder.h>
 #include <rte_udp.h>
+#include <rte_arp.h>
+#include <arpa/inet.h>
 
 #define RX_RING_SIZE 1024
 #define TX_RING_SIZE 1024
@@ -20,6 +22,8 @@
 
 /* echo.c: Basic DPDK UDP echo server */
 
+struct rte_ether_addr mac_addr;
+struct id_addr;
 
 int
 port_init(uint16_t port_id, struct rte_mempool *mbuf_pool) {
@@ -72,14 +76,14 @@ port_init(uint16_t port_id, struct rte_mempool *mbuf_pool) {
 	if (retval < 0)
 		return retval;
 
-	struct rte_ether_addr addr;
-	retval = rte_eth_macaddr_get(port_id, &addr);
+	//struct rte_ether_addr addr;
+	retval = rte_eth_macaddr_get(port_id, &mac_addr);
 	if (retval < 0)
 		return retval;
 
 	RTE_LOG(INFO, APP, "Port %u MAC Address: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
 			" %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
-			port_id, RTE_ETHER_ADDR_BYTES(&addr));
+			port_id, RTE_ETHER_ADDR_BYTES(&mac_addr));
 
 	retval = rte_eth_promiscuous_enable(port_id);
 	if (retval != 0)
@@ -153,6 +157,18 @@ lcore_main(void) {
 				}
 			} else if (rte_bswap16(ether_type) == RTE_ETHER_TYPE_ARP) {
 				RTE_LOG(INFO, APP, "Received ARP frame\n");
+				struct rte_arp_hdr *arp_hdr = rte_pktmbuf_mtod_offset(bufs[i], struct rte_arp_hdr*, sizeof(struct rte_ether_hdr));
+				if (rte_bswap16(arp_hdr->arp_opcode) == RTE_ARP_OP_REQUEST) { // assume ethernet and IPv4 for h/w and proto types 
+					struct rte_arp_ipv4 *ipv4_arp = &arp_hdr->arp_data;
+					printf("ARP target ip address is: 0x%08x\n", ipv4_arp->arp_tip);
+					printf("ARP source ip address is: 0x%08x\n", ipv4_arp->arp_sip);
+					RTE_LOG(INFO, APP, "Source MAC Address: %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
+							RTE_ETHER_ADDR_BYTES(&ipv4_arp->arp_sha));
+					RTE_LOG(INFO, APP, "Target MAC Address: %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
+                                                        RTE_ETHER_ADDR_BYTES(&ipv4_arp->arp_tha));
+				}
+
+
 			}	
 			if (sent == 0)
 				rte_pktmbuf_free(bufs[i]);
@@ -171,6 +187,14 @@ main(int argc, char *argv[]) {
 	int ret = rte_eal_init(argc, argv);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
+
+	struct in_addr ip_addr;
+	int success = inet_pton(AF_INET, "10.0.0.11", &ip_addr);
+	if (success == 1) {
+		printf("ip address is: 0x%08x\n", ntohl(ip_addr.s_addr));
+	}
+
+	printf("argc: %d\n", argc);
 
 	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS, 
 			MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
