@@ -101,59 +101,47 @@ lcore_main(void) {
 		struct rte_ether_hdr *ether_hdr;
 		struct rte_ipv4_hdr *ipv4_hdr;
 		struct rte_udp_hdr *udp_hdr;
-		u_int8_t src_mac[RTE_ETHER_ADDR_LEN];
-		u_int8_t dest_mac[RTE_ETHER_ADDR_LEN];
 		u_int16_t ether_type;
-		u_int32_t src_ip;
-		u_int32_t dest_ip;
-		u_int16_t src_port;
-		u_int16_t dest_port;
 		uint16_t nb_processed = 0;
 		for (int i = 0; i < nb_rx; i++) {
-			RTE_LOG(INFO, APP, "Received a frame\n");
+			int sent = 0;
 			ether_hdr = rte_pktmbuf_mtod(bufs[i], struct rte_ether_hdr *);
 			ether_type = ether_hdr->ether_type;
-			rte_memcpy(src_mac, &ether_hdr->src_addr, sizeof(u_int8_t) * RTE_ETHER_ADDR_LEN);
-			rte_memcpy(dest_mac, &ether_hdr->dst_addr, sizeof(u_int8_t) * RTE_ETHER_ADDR_LEN);
-                        // RTE_LOG(INFO, APP, "Frame received from MAC Address: %02x:%02x:%02x:%02x:%02x:%02x with type: %04x\n",
-                        //                src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5], rte_bswap16(ether_type));
 			if (rte_bswap16(ether_type) == RTE_ETHER_TYPE_IPV4) {
 				ipv4_hdr = rte_pktmbuf_mtod_offset(bufs[i], struct rte_ipv4_hdr*, sizeof(struct rte_ether_hdr));
 				u_int8_t next_proto = ipv4_hdr->next_proto_id;
-				u_int32_t src_ip = ipv4_hdr->src_addr;
-				u_int32_t dest_ip = ipv4_hdr->dst_addr;
-				RTE_LOG(INFO, APP, "next proto is %x\n", next_proto);
 				if (next_proto == IPPROTO_UDP) {
-					// RTE_LOG(INFO, APP, "Received UDP message\n");				
 					udp_hdr = rte_pktmbuf_mtod_offset(bufs[i], struct rte_udp_hdr*, sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
-					src_port = udp_hdr->src_port;
-					dest_port = udp_hdr->dst_port;
-					// RTE_LOG(INFO, APP, "Source port: %u, Destination port: %u\n", rte_bswap16(udp_hdr->src_port), rte_bswap16(udp_hdr->dst_port));	
 					if (1234 == rte_bswap16(udp_hdr->dst_port)) {
-						RTE_LOG(INFO, APP, "Received packet for port 1234\n");
+						u_int16_t temp_port = udp_hdr->dst_port;
 						udp_hdr->dst_port = udp_hdr->src_port;
-						udp_hdr->src_port = dest_port;
+						udp_hdr->src_port = temp_port;
+						u_int32_t temp_ip = ipv4_hdr->dst_addr;
 						ipv4_hdr->dst_addr = ipv4_hdr->src_addr;
-						ipv4_hdr->src_addr = dest_ip;
+						ipv4_hdr->src_addr = temp_ip;
 						struct rte_ether_addr temp_mac = ether_hdr->dst_addr;
 						ether_hdr->dst_addr = ether_hdr->src_addr;
 						ether_hdr->src_addr = temp_mac;
 						nb_processed++;
+						const uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, &bufs[i], 1);
+						sent = 1;
 					}
 				}
 			}	
+			if (sent == 0)
+				rte_pktmbuf_free(bufs[i]);
 		}
 
 
-		const uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, bufs, nb_processed);
+		//const uint16_t nb_tx = rte_eth_tx_burst(port_id, 0, bufs, nb_processed);
 
-		RTE_LOG(INFO, APP, "Sent %x\n", nb_tx);
+		//RTE_LOG(INFO, APP, "Sent %x\n", nb_tx);
 
-		if (unlikely(nb_tx < nb_rx)) {
-			uint16_t buf;
-			for (buf = nb_tx; buf < nb_rx; buf++)
-				rte_pktmbuf_free(bufs[buf]);
-		}
+		//if (unlikely(nb_tx < nb_rx)) {
+		//	uint16_t buf;
+		//	for (buf = nb_tx; buf < nb_rx; buf++)
+		//		rte_pktmbuf_free(bufs[buf]);
+		//}
 
 	}
 
