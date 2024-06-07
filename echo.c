@@ -151,6 +151,8 @@ lcore_main(void) {
 						sent = 1;
 					}
 				}
+			} else if (rte_bswap16(ether_type) == RTE_ETHER_TYPE_ARP) {
+				RTE_LOG(INFO, APP, "Received ARP frame\n");
 			}	
 			if (sent == 0)
 				rte_pktmbuf_free(bufs[i]);
